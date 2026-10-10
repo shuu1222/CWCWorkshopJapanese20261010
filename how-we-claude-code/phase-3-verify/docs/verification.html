@@ -1,0 +1,763 @@
+<!doctype html>
+<!-- Copyright 2026 Anthropic PBC -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Verifiable React — 検証の仕組み</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel2: #1e2230;
+    --border: #2b3044;
+    --text: #e6e8f0;
+    --dim: #8e94ab;
+    --accent: #7aa2ff;
+    --pass: #3fbf7f;
+    --fail: #ef5c70;
+    --warn: #e9b84b;
+    --blocked: #9a6cff;
+    --probe: #62c6e8;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    padding-bottom: 120px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 56px 28px 0; }
+  .wide { max-width: 1100px; margin: 0 auto; padding: 0 28px; }
+
+  /* Typography */
+  h1 { font-size: 38px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 {
+    font-size: 26px; margin: 56px 0 14px; padding-top: 18px;
+    border-top: 1px solid var(--border); letter-spacing: -0.01em;
+  }
+  h2 .num {
+    display: inline-block; min-width: 1.6em; color: var(--accent);
+    font-variant-numeric: tabular-nums; opacity: 0.8;
+  }
+  h3 { font-size: 19px; margin: 32px 0 8px; color: var(--text); }
+  h4 { font-size: 15px; margin: 24px 0 6px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
+  p { margin: 0 0 14px; }
+  .lead { font-size: 19px; color: var(--dim); margin: 6px 0 28px; max-width: 60ch; }
+  .sub { color: var(--dim); font-size: 15px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { color: #fff; }
+  em.term { color: var(--accent); font-style: normal; font-weight: 600; }
+
+  code, pre, .mono { font-family: var(--mono); }
+  code {
+    background: var(--panel2); padding: 2px 6px; border-radius: 5px;
+    font-size: 0.88em; border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto; font-size: 13.5px; line-height: 1.6;
+    margin: 14px 0 20px;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: inherit; }
+  pre .c { color: #6b7491; font-style: italic; }
+  pre .k { color: #c792ea; }
+  pre .s { color: #c3e88d; }
+  pre .n { color: #f78c6c; }
+  pre .t { color: #82aaff; }
+  pre .p { color: #89ddff; }
+  pre .a { color: #ffcb6b; }
+  pre .hl { background: rgba(122,162,255,0.12); display: block; margin: 0 -18px; padding: 0 18px; }
+
+  /* Panels */
+  .callout {
+    background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 14px 18px; margin: 18px 0;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.pass { border-left-color: var(--pass); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout-title { font-weight: 600; margin-bottom: 6px; font-size: 14px; letter-spacing: 0.02em; }
+
+  /* TOC */
+  nav.toc {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 22px; margin: 28px 0 8px;
+  }
+  nav.toc ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 36px; }
+  nav.toc li { margin: 4px 0; break-inside: avoid; }
+  nav.toc a { color: var(--text); }
+  nav.toc a:hover { color: var(--accent); }
+  @media (max-width: 720px) { nav.toc ol { columns: 1; } }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
+  td:first-child, th:first-child { padding-left: 0; }
+  td code:first-child { white-space: nowrap; }
+
+  /* Chips */
+  .chip {
+    display: inline-block; font: 600 11.5px/1 var(--mono);
+    padding: 4px 9px; border-radius: 5px; letter-spacing: 0.04em;
+    border: 1px solid var(--border); margin: 0 4px 4px 0;
+  }
+  .chip.pass { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 40%, var(--border)); background: color-mix(in srgb, var(--pass) 12%, transparent); }
+  .chip.fail { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 40%, var(--border)); background: color-mix(in srgb, var(--fail) 12%, transparent); }
+  .chip.blocked { color: var(--blocked); border-color: color-mix(in srgb, var(--blocked) 40%, var(--border)); background: color-mix(in srgb, var(--blocked) 12%, transparent); }
+  .chip.skip { color: var(--dim); }
+  .chip.ok { color: var(--pass); }
+  .chip.warn { color: var(--warn); }
+  .chip.probe { color: var(--probe); }
+
+  /* Diagram */
+  .diagram {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 28px; margin: 24px 0;
+  }
+  .diagram svg { width: 100%; height: auto; display: block; }
+  .diagram .box { fill: var(--panel2); stroke: var(--border); stroke-width: 1.5; rx: 8; }
+  .diagram .box.accent { stroke: var(--accent); }
+  .diagram .box.pass { stroke: var(--pass); }
+  .diagram .label { fill: var(--text); font: 600 13px var(--mono); }
+  .diagram .sublabel { fill: var(--dim); font: 12px var(--mono); }
+  .diagram .arrow { stroke: var(--dim); stroke-width: 1.5; fill: none; marker-end: url(#ah); }
+  .diagram .arrow.hot { stroke: var(--accent); marker-end: url(#ahA); }
+
+  /* Flow steps */
+  .flow { counter-reset: step; margin: 18px 0; }
+  .flow-step {
+    position: relative; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px 14px 58px; margin: 10px 0;
+  }
+  .flow-step::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 16px; top: 14px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--panel2); border: 1px solid var(--accent); color: var(--accent);
+    display: grid; place-items: center; font: 600 13px var(--mono);
+  }
+  .flow-step b { display: block; margin-bottom: 2px; }
+  .flow-step .sub { font-size: 14px; }
+
+  /* File tree */
+  .tree {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 20px; font: 13px/1.8 var(--mono); white-space: pre; overflow-x: auto;
+    margin: 14px 0 20px;
+  }
+  .tree .d { color: var(--accent); }
+  .tree .c { color: var(--dim); }
+
+  /* Two-col */
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 820px) { .two { grid-template-columns: 1fr; } }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 36px 0; }
+  .footer { color: var(--dim); font-size: 13.5px; margin-top: 60px; border-top: 1px solid var(--border); padding-top: 20px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<h1>検証の仕組み</h1>
+<p class="lead">
+  <code>verifiable-react</code> アーキテクチャの詳細ツアー。
+  <strong>あらゆる部分を、実行時にAIエージェントが観測・操作・検証できる</strong>ように
+  構成された React アプリ。しかも同じコードパスが、人間・CI・機械のすべてに奉仕します。
+</p>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#philosophy">哲学: 検証 ≠ テスト</a></li>
+    <li><a href="#anatomy">システムの解剖</a></li>
+    <li><a href="#contract">DOMコントラクト（<code>data-verify-*</code>）</a></li>
+    <li><a href="#units">検証可能なユニット、フィクスチャ、不変条件</a></li>
+    <li><a href="#verifiers">差し替え可能な検証器</a></li>
+    <li><a href="#runner">ランナーと判定の分類</a></li>
+    <li><a href="#routes">隔離されたルートとダッシュボード</a></li>
+    <li><a href="#handle"><code>window.__verify</code> — エージェント用ハンドル</a></li>
+    <li><a href="#consumers">1本のパイプライン、3種類の利用者</a></li>
+    <li><a href="#walkthrough">エンドツーエンドのウォークスルー</a></li>
+    <li><a href="#extending">拡張: 新しいユニットと検証器</a></li>
+    <li><a href="#principles">設計原則のまとめ</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================== -->
+<h2 id="philosophy"><span class="num">1</span> 哲学: 検証 ≠ テスト</h2>
+
+<p>
+  このアーキテクチャは、たったひとつのメンタルモデルの上に成り立っています。
+</p>
+
+<div class="callout">
+  <p class="callout-title">検証とは、表層における実行時の観測である。</p>
+  <p>
+    アプリをビルドし、実行し、変更したコードが実際に動く場所まで操作して、
+    目に見えたものを捕捉する。その捕捉結果が証拠になります。テストや型チェックはCIの仕事です。
+    検証器の仕事は、<strong>本物の成果物</strong>が正しく振る舞うことを、
+    ユーザー（人間であれプログラムであれ）がそれに触れる境界で確認することです。
+  </p>
+</div>
+
+<p>
+  CLIなら表層はターミナル、サーバーならソケット、React アプリなら表層は
+  <strong>レンダリングされたDOM</strong>です。だからこのシステムは、DOM自体を機械可読にし、
+  すべてのコンポーネントに「既知の状態で隔離してマウントされる手段」を与え、
+  判定を読み取るための構造化APIを公開します。
+</p>
+
+<table>
+  <thead><tr><th>観点</th><th>ユニットテスト</th><th>検証（このシステム）</th></tr></thead>
+  <tbody>
+    <tr><td>何が動くか</td><td>関数。Node上で、モック付き</td><td>コンポーネント。本物のDOM上で、本物の状態で</td></tr>
+    <tr><td>何を確認するか</td><td>戻り値／モックの呼び出し</td><td>実際にレンダリングされた内容と、その反応</td></tr>
+    <tr><td>誰が使うか</td><td>CI</td><td>CI <em>と</em> ダッシュボード <em>と</em> AIエージェント — すべて同じコードパス</td></tr>
+    <tr><td>捕まえられる不具合</td><td>ロジックのバグ</td><td>ロジックのバグ、結合のバグ、コントラクトのずれ、a11yの退行</td></tr>
+    <tr><td>判定の形</td><td>pass / fail</td><td><span class="chip pass">PASS</span><span class="chip fail">FAIL</span><span class="chip blocked">BLOCKED</span><span class="chip skip">SKIP</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================== -->
+<h2 id="anatomy"><span class="num">2</span> システムの解剖</h2>
+
+</div>
+<div class="wide">
+<div class="diagram">
+<svg viewBox="0 0 1040 460">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8e94ab"/>
+    </marker>
+    <marker id="ahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7aa2ff"/>
+    </marker>
+  </defs>
+
+  <!-- Left column: app -->
+  <rect class="box" x="20" y="30" width="220" height="120"/>
+  <text class="label" x="36" y="56">features/todos/</text>
+  <text class="sublabel" x="36" y="78">TodoItem, TodoList,</text>
+  <text class="sublabel" x="36" y="96">TodoInput, TodoStats,</text>
+  <text class="sublabel" x="36" y="114">TodoApp, useTodos</text>
+  <text class="sublabel" x="36" y="138" fill="#7aa2ff">data-verify-* を出力</text>
+
+  <!-- Specs -->
+  <rect class="box accent" x="20" y="200" width="220" height="120"/>
+  <text class="label" x="36" y="226">verify/specs/</text>
+  <text class="sublabel" x="36" y="248">*.verify.ts</text>
+  <text class="sublabel" x="36" y="268">Zodスキーマ · フィクスチャ</text>
+  <text class="sublabel" x="36" y="286">不変条件 · probe 🔍</text>
+
+  <!-- Verifiers -->
+  <rect class="box accent" x="20" y="350" width="220" height="90"/>
+  <text class="label" x="36" y="376">verify/verifiers/</text>
+  <text class="sublabel" x="36" y="398">schema · invariants</text>
+  <text class="sublabel" x="36" y="416">dom-contract · a11y</text>
+
+  <!-- Registry -->
+  <rect class="box" x="320" y="200" width="180" height="80"/>
+  <text class="label" x="336" y="228">registry.ts</text>
+  <text class="sublabel" x="336" y="250">ユニット + 検証器</text>
+  <text class="sublabel" x="336" y="268">buildManifest()</text>
+
+  <!-- Runner -->
+  <rect class="box pass" x="560" y="180" width="200" height="120"/>
+  <text class="label" x="576" y="208">runner.ts</text>
+  <text class="sublabel" x="576" y="230">マウント → 操作 →</text>
+  <text class="sublabel" x="576" y="248">検証器を実行 →</text>
+  <text class="sublabel" x="576" y="266">判定 + チェック</text>
+  <text class="sublabel" x="576" y="286" fill="#3fbf7f">VerifyResult</text>
+
+  <!-- Consumers -->
+  <rect class="box" x="830" y="40" width="190" height="70"/>
+  <text class="label" x="846" y="66">ダッシュボード</text>
+  <text class="sublabel" x="846" y="86">/verify · "Run all"</text>
+
+  <rect class="box" x="830" y="130" width="190" height="70"/>
+  <text class="label" x="846" y="156">UnitPage</text>
+  <text class="sublabel" x="846" y="176">/verify/:unit/:fixture</text>
+
+  <rect class="box accent" x="830" y="220" width="190" height="70"/>
+  <text class="label" x="846" y="246">window.__verify</text>
+  <text class="sublabel" x="846" y="266">manifest · current · runAll</text>
+
+  <rect class="box" x="830" y="310" width="190" height="70"/>
+  <text class="label" x="846" y="336">matrix.test.ts</text>
+  <text class="sublabel" x="846" y="356">vitest + jsdom（CI）</text>
+
+  <!-- Arrows -->
+  <path class="arrow" d="M130 150 L130 200"/>
+  <path class="arrow hot" d="M240 250 L320 240"/>
+  <path class="arrow hot" d="M240 390 L300 390 Q320 390 320 370 L320 270"/>
+  <path class="arrow hot" d="M500 240 L560 240"/>
+  <path class="arrow" d="M760 210 Q800 210 800 75 L830 75"/>
+  <path class="arrow" d="M760 225 Q800 225 800 165 L830 165"/>
+  <path class="arrow hot" d="M760 240 L830 255"/>
+  <path class="arrow" d="M760 270 Q800 270 800 345 L830 345"/>
+</svg>
+</div>
+</div>
+<div class="wrap">
+<p class="sub">
+  <strong>図の読み方:</strong> コンポーネントがDOMコントラクトを出力し、スペックと検証器が
+  共有レジストリに登録され、ランナーがフィクスチャをマウントして検証器を走らせ、
+  構造化された <code>VerifyResult</code> を生成する唯一の実行パスになります。
+  4種類の利用者はすべてランナーを呼び出し、違うのは結果を
+  <em>表示する</em>／<em>アサートする</em>方法だけです。
+</p>
+
+<h4>ファイル構成</h4>
+<div class="tree"><span class="d">src/</span>
+├─ <span class="d">features/todos/</span>          <span class="c">アプリ本体 — data-verify-* コントラクトを出力する</span>
+├─ <span class="d">verify/</span>
+│  ├─ <span class="d">core/</span>
+│  │  ├─ types.ts             <span class="c">VerifiableUnit, Fixture, Invariant, Verifier, Verdict</span>
+│  │  ├─ contract.ts          <span class="c">data-verify-* 用のヘルパー</span>
+│  │  ├─ registry.ts          <span class="c">ユニットと検証器の中央レジストリ + マニフェスト</span>
+│  │  └─ runner.ts            <span class="c">マウント → 操作 → 検証 → 判定</span>
+│  ├─ <span class="d">verifiers/</span>             <span class="c">差し替え可能: schema, invariants, dom-contract, a11y</span>
+│  ├─ <span class="d">specs/</span>                 <span class="c">1ユニットにつき1つの *.verify.ts（中央の /verify ディレクトリ）</span>
+│  ├─ <span class="d">harness/</span>
+│  │  ├─ handle.ts            <span class="c">window.__verify</span>
+│  │  ├─ Dashboard.tsx        <span class="c">/verify</span>
+│  │  ├─ UnitPage.tsx         <span class="c">/verify/:unit/:fixture</span>
+│  │  └─ Report.tsx, Badge.tsx
+│  └─ matrix.test.ts          <span class="c">CI: 全ユニット×フィクスチャを実行し、判定をアサートする</span>
+└─ main.tsx                   <span class="c">検証器とスペックをimportし、ハンドルを設置し、ルーティングする</span></div>
+
+<!-- ============================================================== -->
+<h2 id="contract"><span class="num">3</span> DOMコントラクト（<code>data-verify-*</code>）</h2>
+
+<p>
+  最下層のレイヤー。すべてのコンポーネントがルート要素に <code>verifyAttrs({...})</code> を
+  スプレッドし、自身の<em>意味的な</em>状態を表す <code>data-verify-*</code> 属性群を出力します。
+  スタイリングでも内部実装でもなく、意味です。
+</p>
+
+<pre><code><span class="c">// features/todos/TodoApp.tsx</span>
+&lt;<span class="t">section</span>
+  <span class="a">className</span>=<span class="s">"todo-app"</span>
+<span class="hl">  {...<span class="t">verifyAttrs</span>({</span>
+<span class="hl">    <span class="a">unit</span>: <span class="s">"TodoApp"</span>,</span>
+<span class="hl">    <span class="a">total</span>: t.stats.total,   <span class="a">done</span>: t.stats.done,   <span class="a">active</span>: t.stats.active,</span>
+<span class="hl">    <span class="a">filter</span>: t.filter,      <span class="a">visible</span>: t.visible.length,</span>
+<span class="hl">  })}</span>
+&gt;</code></pre>
+
+<p>これは次のようにレンダリングされます。</p>
+
+<pre><code>&lt;<span class="t">section</span> <span class="a">class</span>=<span class="s">"todo-app"</span>
+  <span class="a">data-verify-unit</span>=<span class="s">"TodoApp"</span> <span class="a">data-verify-total</span>=<span class="s">"3"</span> <span class="a">data-verify-done</span>=<span class="s">"1"</span>
+  <span class="a">data-verify-active</span>=<span class="s">"2"</span> <span class="a">data-verify-filter</span>=<span class="s">"all"</span> <span class="a">data-verify-visible</span>=<span class="s">"3"</span>&gt;</code></pre>
+
+<div class="callout pass">
+  <p class="callout-title">これが重要な理由</p>
+  <p>
+    DOM <em>こそが</em> 表層です。エージェントと検証器は、React の fiber を覗き込んだり
+    CSSクラスから推測したりするのではなく、
+    <code>readContract(root)</code> → <code>{unit, total, done, active, filter, visible}</code>
+    を読みます。コンポーネントの内部実装は丸ごと書き換えられます。状態管理ライブラリの変更、
+    スタイルの作り直し、リファクタリング — コントラクトが守られている限り、
+    すべての検証器は通り続けます。
+  </p>
+</div>
+
+<p>
+  ヘルパーは <code>src/verify/core/contract.ts</code> にあり、
+  <code>verifyAttrs()</code>（書き込み）、<code>readContract()</code>（ルートのコントラクトを読む）、
+  <code>readAllContracts()</code>（コントラクトを持つ子孫要素すべてを読む。リストや機能単位で便利）
+  を提供します。
+</p>
+
+<!-- ============================================================== -->
+<h2 id="units"><span class="num">4</span> 検証可能なユニット、フィクスチャ、不変条件</h2>
+
+<p>
+  <em class="term">VerifiableUnit</em> はモジュール性の単位です。単一のコンポーネント
+  （<code>kind: "component"</code>）か、独自の状態を持つ機能スライス全体
+  （<code>kind: "feature"</code>）のいずれかです。
+  <code>src/verify/specs/</code> の各スペックファイルが、ちょうど1つを登録します。
+</p>
+
+<pre><code><span class="c">// src/verify/specs/TodoItem.verify.ts（抜粋）</span>
+<span class="t">registerUnit</span>&lt;TodoItemProps&gt;({
+  <span class="a">id</span>: <span class="s">"TodoItem"</span>,
+  <span class="a">title</span>: <span class="s">"TodoItem"</span>,
+  <span class="a">kind</span>: <span class="s">"component"</span>,
+  <span class="a">render</span>: (props) =&gt; <span class="t">createElement</span>(TodoItem, props),
+  <span class="a">propsSchema</span>: z.object({ todo: TodoSchema, onToggle: z.function(), onRemove: z.function() }),
+
+  <span class="a">fixtures</span>: [
+    { <span class="a">id</span>: <span class="s">"active"</span>,     <span class="a">props</span>: { todo: { text: <span class="s">"Buy milk"</span>, done: <span class="k">false</span>, ... } } },
+    { <span class="a">id</span>: <span class="s">"done"</span>,       <span class="a">props</span>: { todo: { text: <span class="s">"Ship it"</span>,  done: <span class="k">true</span>,  ... } } },
+<span class="hl">    { <span class="a">id</span>: <span class="s">"empty-text"</span>, <span class="a">probe</span>: <span class="k">true</span>, <span class="a">props</span>: { todo: { text: <span class="s">""</span>, ... } } },</span>
+<span class="hl">    { <span class="a">id</span>: <span class="s">"long-text"</span>,  <span class="a">probe</span>: <span class="k">true</span>, <span class="a">props</span>: { todo: { text: <span class="s">"x"</span>.repeat(<span class="n">500</span>), ... } } },</span>
+  ],
+
+  <span class="a">invariants</span>: [
+    { <span class="a">id</span>: <span class="s">"done-attr-matches-prop"</span>,
+      <span class="a">check</span>: ({ contract, props }) =&gt; contract.done === <span class="t">String</span>(props.todo.done) },
+    { <span class="a">id</span>: <span class="s">"checkbox-state-matches"</span>,
+      <span class="a">check</span>: ({ root, props }) =&gt; root.querySelector(<span class="s">"input[type=checkbox]"</span>).checked === props.todo.done },
+    { <span class="a">id</span>: <span class="s">"visible-text-never-empty"</span>,
+      <span class="a">check</span>: ({ root }) =&gt; root.querySelector(<span class="s">".todo-text"</span>).textContent.trim().length &gt; <span class="n">0</span> },
+  ],
+})</code></pre>
+
+<h3>フィクスチャ</h3>
+<p>
+  <em class="term">Fixture</em> は、名前付きで再現可能なレンダリング構成です。
+  <code>props</code> を持ち、任意で命令的な <code>act(ctx)</code> ステップを持てます。
+  これはマウント後・検証前に実行され、「レンダリングして、Xをクリックして、それから検証する」
+  という流れをフィクスチャとして表現できます。
+</p>
+
+<pre><code><span class="c">// todos.feature.verify.ts より — 振る舞いのフィクスチャ</span>
+{
+  <span class="a">id</span>: <span class="s">"add-then-toggle"</span>,
+  <span class="a">props</span>: {},
+  <span class="a">act</span>: <span class="k">async</span> (ctx) =&gt; {
+    ctx.<span class="t">type</span>(<span class="s">"input[type=text]"</span>, <span class="s">"Ship it"</span>);
+    ctx.<span class="t">click</span>(<span class="s">"button[type=submit]"</span>);
+    <span class="k">await</span> ctx.<span class="t">wait</span>(<span class="n">16</span>);
+    ctx.<span class="t">click</span>(<span class="s">"li.todo-item input[type=checkbox]"</span>);
+  },
+}</code></pre>
+
+<div class="callout warn">
+  <p class="callout-title">🔍 probe は必須</p>
+  <p>
+    <code>probe: true</code> が付いたフィクスチャは、敵対的／ハッピーパス外のケースです。
+    空文字、500文字のテキスト、空白文字だけの送信、矛盾した件数など。
+    経験則はこうです。<em>「✅ばかりで🔍がないチェックリストは、ハッピーパスの再生にすぎない」</em>。
+    CIのマトリクステスト（<code>matrix.test.ts</code>）は
+    <strong>probe フィクスチャをひとつも宣言していないユニットを失敗させます</strong>。
+    ハッピーパスしかテストしていないユニットは出荷できません。
+  </p>
+</div>
+
+<h3>不変条件（Invariants）</h3>
+<p>
+  <em class="term">Invariant</em> は、マウントされたDOMに対する名前付きの述語です。
+  <code>(ctx) =&gt; boolean | string</code> という形をとり、<code>true</code> なら成立、
+  <code>false</code> か文字列なら違反（文字列はそのまま診断メッセージになります）。
+  不変条件は次のものを受け取ります。
+</p>
+<table>
+  <tr><td><code>root</code></td><td>ユニットがマウントされている生きた <code>HTMLElement</code></td></tr>
+  <tr><td><code>props</code></td><td>そのフィクスチャの props</td></tr>
+  <tr><td><code>contract</code></td><td>パース済みの <code>data-verify-*</code> マップ — 通常はこれだけで足りる</td></tr>
+  <tr><td><code>fixture</code></td><td>フィクスチャそのもの（条件分岐用）</td></tr>
+</table>
+<p>
+  <code>onlyFixtures: ["id", ...]</code> を使うと、不変条件を特定のフィクスチャだけに
+  限定できます（例えば「追加後は total が 1」は <code>add-then-verify</code>
+  フィクスチャでしか意味を持ちません）。
+</p>
+
+<h3>コンポーネント単位と機能単位</h3>
+<div class="two">
+  <div>
+    <h4>コンポーネント単位（Component unit）</h4>
+    <p class="sub">
+      <code>TodoItem</code>、<code>TodoInput</code>、<code>TodoList</code>、
+      <code>TodoStats</code>。スペックの視点からはステートレスで、フィクスチャが props を渡し、
+      不変条件がコントラクトにそれが反映されているかを確認します。
+      ひとつの部品を本当に隔離した状態でテストします。
+    </p>
+  </div>
+  <div>
+    <h4>機能単位（Feature unit）</h4>
+    <p class="sub">
+      <code>todos.feature</code> = <code>TodoApp</code> 全体。本物の状態を持ちます。
+      フィクスチャは <code>act()</code> に頼って操作を駆動します。不変条件が確認するのは
+      <strong>連携</strong>です。「TodoStats のコントラクトが TodoApp のコントラクトと一致する」
+      「表示件数がフィルタと一致する」「Todoを追加するとリストと統計の両方が更新される」。
+    </p>
+  </div>
+</div>
+
+<!-- ============================================================== -->
+<h2 id="verifiers"><span class="num">5</span> 差し替え可能な検証器</h2>
+
+<p>
+  <em class="term">Verifier</em> は、チェックの「種類」です。特定のコンポーネントには依存せず、
+  マウントされているユニット×フィクスチャが何であれそれを調べ、構造化された
+  <code>Check[]</code> を返します。このデモには4つ同梱されています。
+</p>
+
+<table>
+  <thead><tr><th>検証器</th><th>何を確認するか</th><th>失敗が意味すること</th></tr></thead>
+  <tbody>
+    <tr><td><code>schema</code></td><td>フィクスチャの props がユニットの Zod <code>propsSchema</code>（<code>.refine()</code> ルールを含む）でパースできるか</td><td>フィクスチャが「有効な入力」だと偽っている、または prop の型がずれた</td></tr>
+    <tr><td><code>invariants</code></td><td>宣言されたすべての不変条件の述語を、生きたDOMに対して実行する</td><td>コントラクトの主張が成立していない</td></tr>
+    <tr><td><code>dom-contract</code></td><td><code>data-verify-*</code> コントラクトが存在し、自己識別できているか（<code>data-verify-unit</code>）</td><td>表層が機械可読になっていない — エージェントは推測するしかなくなる</td></tr>
+    <tr><td><code>a11y</code></td><td>ボタンに名前があるか、入力にラベルがあるか、画像に alt があるか</td><td>アクセシビリティの退行</td></tr>
+  </tbody>
+</table>
+
+<p>
+  インターフェースはごく小さいです。
+</p>
+<pre><code><span class="k">interface</span> <span class="t">Verifier</span> {
+  <span class="a">id</span>: <span class="t">string</span>
+  <span class="a">description</span>: <span class="t">string</span>
+  <span class="a">run</span>: (ctx: { unit, fixture, root, contract }) =&gt; <span class="t">Check</span>[] | <span class="t">Promise</span>&lt;<span class="t">Check</span>[]&gt;
+}</code></pre>
+
+<div class="callout">
+  <p class="callout-title">差し替え可能であることが肝</p>
+  <p>
+    検証器とユニットは直交しています。新しい<em>種類</em>の検証 —
+    ビジュアルスナップショット差分、パフォーマンス予算、i18n文字列のカバレッジ、
+    ダークモードのコントラスト — を追加するには、
+    <code>src/verify/verifiers/</code> にファイルを1つ書き、<code>index.ts</code> で
+    import するだけ。既存のすべてのユニット×フィクスチャに対して即座に実行されます。
+    コンポーネントの変更はゼロです。ユニット側は
+    <code>verifiers: ["schema", "invariants"]</code> のように一部だけを選ぶこともでき、
+    省略すればすべてが適用されます。
+  </p>
+</div>
+
+<!-- ============================================================== -->
+<h2 id="runner"><span class="num">6</span> ランナーと判定の分類</h2>
+
+<p>
+  <code>src/verify/core/runner.ts</code> が唯一の実行パスです。それ以外はすべて、
+  単にこれを呼び出すだけです。<code>runFixture(unit, fixture, opts?)</code> は次のことを行います。
+</p>
+
+<div class="flow">
+  <div class="flow-step"><b>マウント</b><span class="sub">画面外のコンテナを作る（または <code>UnitPage</code> から渡された可視コンテナを使う）→ <code>createRoot</code> → <code>flushSync(render)</code>。</span></div>
+  <div class="flow-step"><b>操作（Act）</b><span class="sub">フィクスチャに <code>act()</code> があれば、小さなドライバ（<code>click</code>、<code>type</code>、<code>wait</code>）とともに実行。<code>type</code> ヘルパーはネイティブの value セッターを使うため、React の <code>onChange</code> が発火します。</span></div>
+  <div class="flow-step"><b>コントラクトを読む</b><span class="sub"><code>readContract(container)</code> → フラットな <code>{unit, total, done, ...}</code> マップ。</span></div>
+  <div class="flow-step"><b>検証器を実行</b><span class="sub">該当するすべての検証器が <code>{unit, fixture, root, contract}</code> に対して実行されます。例外はスタックトレースを証拠として付けた <span class="chip fail">fail</span> チェックになります。決して握り潰しません。</span></div>
+  <div class="flow-step"><b>判定を算出</b><span class="sub"><span class="chip fail">fail</span> チェックが1つでもあれば → <span class="chip fail">FAIL</span>。マウント/セットアップで例外 → <span class="chip blocked">BLOCKED</span>。フィクスチャがゼロ → <span class="chip skip">SKIP</span>。それ以外は <span class="chip pass">PASS</span>。</span></div>
+  <div class="flow-step"><b><code>VerifyResult</code> を返す</b><span class="sub"><code>{unitId, fixtureId, verdict, checks[], domSnapshot, durationMs, timestamp, blockedReason?}</code> — 完全にシリアライズ可能なJSON。</span></div>
+</div>
+
+<h3>判定（Verdicts）</h3>
+<table>
+  <tr><td><span class="chip pass">PASS</span></td><td>マウントして操作し、すべてのチェックが成立した。「テストが通った」や「コードが正しそう」ではなく、<em>表層があるべき振る舞いをした</em>ということ。</td></tr>
+  <tr><td><span class="chip fail">FAIL</span></td><td>マウントして操作した結果、少なくとも1つのチェックが <code>fail</code>。<code>checks[]</code> 配列が、どれが・なぜ失敗したかを正確に教えてくれます。</td></tr>
+  <tr><td><span class="chip blocked">BLOCKED</span></td><td>変更が観測できる状態まで到達できなかった。マウントで例外、検証器が未登録、コンテナがない等。<strong>ユニットに対する判定ではありません。</strong><code>blockedReason</code> がどこで止まったかを正確に示します。</td></tr>
+  <tr><td><span class="chip skip">SKIP</span></td><td>実行時の表層が存在しない — ユニットがフィクスチャをゼロ個しか宣言していない。何も問題は起きておらず、観測すべきものがないだけです。</td></tr>
+</table>
+
+<h3>チェックのステータス</h3>
+<p>
+  <span class="chip ok">ok ✅</span> 確認できた &nbsp;
+  <span class="chip fail">fail ❌</span> 観測した結果が誤っていた &nbsp;
+  <span class="chip warn">warn ⚠️</span> 気になるが失敗ではない &nbsp;
+  <span class="chip probe">probe 🔍</span> ハッピーパス外のケースが成立した
+</p>
+
+<div class="callout warn">
+  <p class="callout-title">迷ったら FAIL</p>
+  <p>
+    誤った PASS は壊れたコードを出荷してしまいますが、誤った FAIL のコストは
+    人間がもう一度見る手間だけです。だから検証器の例外は fail チェックになり、
+    曖昧な出力は生の証拠を添えて FAIL とし、<code>warn</code>／<code>probe</code> は
+    決して FAIL を PASS に格上げしません。
+  </p>
+</div>
+
+<!-- ============================================================== -->
+<h2 id="routes"><span class="num">7</span> 隔離されたルートとダッシュボード</h2>
+
+<h3><code>/verify/:unitId/:fixtureId</code> — 隔離マウント</h3>
+<p>
+  ちょうど1つのユニットを、ちょうど1つのフィクスチャで、市松模様のステージ上に可視でマウントします。
+  <em>その見えているマウント</em>に対してすべての検証器を実行し、構造化されたレポートを下部に描画します。
+  <code>?chrome=0</code> を付けるとハーネスのヘッダーとレポートが隠れるので、
+  エージェントはコンポーネントだけのきれいなスクリーンショットを撮れます。
+</p>
+<p class="sub">
+  これが求めていた「隔離されたレンダリング先」です。アプリのシェルもプロバイダもノイズもありません。
+  このページは JSON の結果を
+  <code>&lt;script id="verify-result-json" type="application/json"&gt;</code> にも書き込むので、
+  DOMしか読めない（JSの評価ができない）エージェントでも構造化された出力を得られます。
+</p>
+
+<h3><code>/verify</code> — ダッシュボード</h3>
+<p>
+  登録されたすべてのユニット、そのフィクスチャ（🔍マーカー付き）、不変条件、
+  どの検証器が適用されるかを一覧表示します。<strong>「Run all」</strong>はマトリクス全体を
+  画面外で実行し、判定グリッドを描画します。サマリーバー
+  （<code>✅ n ❌ n ⛔ n / total</code>）は <code>data-verify-summary</code> のJSONとしても
+  出力されます。「Raw manifest」の開閉パネルでは、<code>__verify.manifest()</code> から
+  エージェントが見るものをそのまま確認できます。
+</p>
+
+<!-- ============================================================== -->
+<h2 id="handle"><span class="num">8</span> <code>window.__verify</code> — エージェント用ハンドル</h2>
+
+<p>
+  起動時に <code>installVerifyHandle()</code> によって設置されます。これは
+  <strong>検証器自身のためのプログラム向け表層</strong>です。AIエージェント、Playwright、
+  あるいは devtools を開いたあなたが使います。
+</p>
+
+<table>
+  <thead><tr><th>メソッド</th><th>戻り値</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr><td><code>manifest()</code></td><td><code>VerifyManifestEntry[]</code></td><td>すべてのユニット、そのフィクスチャ（probeフラグ付き）、不変条件、適用される検証器、そして隔離URLを返す <code>route(fixtureId)</code> 関数を発見する。</td></tr>
+    <tr><td><code>current()</code></td><td><code>VerifyResult | null</code></td><td>現在マウントされている <code>/verify/:unit/:fixture</code> の構造化された結果を読む。それ以外の場所では <code>null</code>。</td></tr>
+    <tr><td><code>runAll()</code></td><td><code>Promise&lt;VerifyResult[]&gt;</code></td><td>ページを離れずに、マトリクス全体をヘッドレス（画面外マウント）で実行する。ダッシュボードのボタンやCIと同じコードパス。</td></tr>
+    <tr><td><code>version</code></td><td><code>"1.0"</code></td><td>パースする前に、エージェントがプロトコルの形を確認できるようにする。</td></tr>
+  </tbody>
+</table>
+
+<pre><code><span class="c">// AIエージェントがやること — DOMスクレイピングもセレクタの推測も不要</span>
+<span class="k">const</span> manifest = window.__verify.<span class="t">manifest</span>()
+<span class="c">// 機能スライスを選ぶ</span>
+<span class="k">const</span> app = manifest.find(m =&gt; m.unitId === <span class="s">"todos.feature"</span>)
+location.href = app.<span class="t">route</span>(<span class="s">"add-then-toggle"</span>)   <span class="c">// → /verify/todos.feature/add-then-toggle</span>
+<span class="c">// ... 遷移後 ...</span>
+<span class="k">const</span> r = window.__verify.<span class="t">current</span>()
+r.verdict        <span class="c">// "PASS"</span>
+r.checks         <span class="c">// [{verifier:"invariants", status:"ok", label:"after add+toggle, done=1"}, ...]</span>
+r.domSnapshot    <span class="c">// {unit:"TodoApp", total:"1", done:"1", active:"0", filter:"all", visible:"1"}</span></code></pre>
+
+<!-- ============================================================== -->
+<h2 id="consumers"><span class="num">9</span> 1本のパイプライン、3種類の利用者</h2>
+
+<p>
+  構造上もっとも重要な性質がこれです。<strong><code>VerifyResult</code> を生み出す方法は
+  ちょうど1つしかありません</strong> — <code>runFixture()</code> です。
+  3種類の利用者の違いは、それをどう取得して提示するかだけです。
+</p>
+
+<table>
+  <thead><tr><th>利用者</th><th>入口</th><th>マウント方法</th><th>提示方法</th></tr></thead>
+  <tbody>
+    <tr><td>人間（ダッシュボード）</td><td><code>/verify</code> → 「Run all」</td><td>ブラウザ内、画面外</td><td>判定グリッド + ユニット別テーブル</td></tr>
+    <tr><td>人間（1件に集中）</td><td><code>/verify/:unit/:fixture</code></td><td>ステージ上に可視で</td><td>ライブレンダリング + レポートカード + JSONシンク</td></tr>
+    <tr><td>AIエージェント / Playwright</td><td><code>window.__verify</code></td><td>画面外（<code>runAll</code>）または可視（遷移 + <code>current</code>）</td><td>生の <code>VerifyResult</code> JSON</td></tr>
+    <tr><td>CI</td><td><code>bun run verify</code> → <code>matrix.test.ts</code></td><td>jsdom、ヘッドレス</td><td>ユニット×フィクスチャごとの vitest の pass/fail</td></tr>
+  </tbody>
+</table>
+
+<p>
+  パイプラインが1本なので、退行はどこでも同一に現れます。
+  「CIでは通るのにエージェントには FAIL に見える」ということは起こり得ません。
+  まったく同じ関数呼び出しなのです。
+</p>
+
+<!-- ============================================================== -->
+<h2 id="walkthrough"><span class="num">10</span> エンドツーエンドのウォークスルー</h2>
+
+<p>
+  <code>todos.feature</code> / <code>whitespace-submit</code> で何が起きるかを追ってみます。
+  これは空白文字だけを入力して強制的に送信し、Todoが1件も作られていないことを
+  アサートする🔍probeです。
+</p>
+
+<div class="flow">
+  <div class="flow-step"><b>スペックが登録される</b><span class="sub"><code>todos.feature.verify.ts</code> が <code>registerUnit</code> を呼び、フィクスチャ <code>{id:"whitespace-submit", probe:true, props:{}, act: "&nbsp;&nbsp;&nbsp;" を入力して送信}</code> と不変条件 <code>whitespace-blocked: contract.total === "0"</code> を登録します。</span></div>
+  <div class="flow-step"><b>利用者がランナーを呼ぶ</b><span class="sub">ダッシュボードの「Run all」／<code>__verify.runAll()</code>／vitest が、それぞれ <code>runFixture(unit, fixture)</code> を呼びます。</span></div>
+  <div class="flow-step"><b>マウント + 操作</b><span class="sub"><code>TodoApp</code> が空の初期状態でレンダリングされます。<code>act</code> が入力欄に <code>"   "</code> を入力し（ネイティブセッター → React の <code>onChange</code> が発火）、フォームに <code>submit</code> イベントをディスパッチします。</span></div>
+  <div class="flow-step"><b>コントラクトを読む</b><span class="sub"><code>useTodos.add()</code> がトリムして空を拒否するため、DOMには <code>data-verify-total="0"</code> が表示されています。</span></div>
+  <div class="flow-step"><b>検証器が実行される</b><span class="sub"><code>schema</code> ✅ props は有効 · <code>dom-contract</code> ✅ コントラクトあり · <code>a11y</code> ✅ 入力にラベルあり · <code>invariants</code> が <code>whitespace-blocked</code> を含む6つの述語を実行 → <span class="chip probe">probe 🔍</span>。</span></div>
+  <div class="flow-step"><b>判定</b><span class="sub">fail チェックなし → <span class="chip pass">PASS</span>。結果: <code>{verdict:"PASS", checks:[...11], domSnapshot:{unit:"TodoApp", total:"0", ...}}</code>。</span></div>
+</div>
+
+<h3>意図的な失敗: <code>TodoStats / inconsistent-counts</code></h3>
+<p>
+  この probe は <code>{total:10, done:3, active:4}</code> を渡します。Zod の
+  <code>.refine(d =&gt; d.total === d.done + d.active)</code> が失敗し →
+  <code>schema</code> 検証器が <span class="chip fail">fail</span> チェックを出し →
+  判定は <span class="chip fail">FAIL</span> になります。そしてマトリクステストは
+  <em>これが FAIL であることをアサート</em>します。このフレームワークが真実を確認するだけでなく、
+  嘘を見つけ出せることの証明です。スキーマを緩めて「直して」しまうと、CIが壊れます。
+</p>
+
+<!-- ============================================================== -->
+<h2 id="extending"><span class="num">11</span> 拡張: 新しいユニットと検証器</h2>
+
+<div class="two">
+<div>
+<h4>検証可能なユニットを追加する</h4>
+<pre><code><span class="c">// src/verify/specs/MyThing.verify.ts</span>
+<span class="k">import</span> { registerUnit } <span class="k">from</span> <span class="s">"../core/registry"</span>
+<span class="k">import</span> { MyThing } <span class="k">from</span> <span class="s">"../../features/.../MyThing"</span>
+
+<span class="t">registerUnit</span>({
+  <span class="a">id</span>: <span class="s">"MyThing"</span>, <span class="a">kind</span>: <span class="s">"component"</span>,
+  <span class="a">render</span>: (p) =&gt; &lt;MyThing {...p}/&gt;,
+  <span class="a">propsSchema</span>: z.object({...}),
+  <span class="a">fixtures</span>: [
+    { <span class="a">id</span>: <span class="s">"default"</span>, <span class="a">props</span>: {...} },
+    { <span class="a">id</span>: <span class="s">"edge"</span>, <span class="a">probe</span>: <span class="k">true</span>, <span class="a">props</span>: {...} },
+  ],
+  <span class="a">invariants</span>: [{ <span class="a">id</span>: <span class="s">"..."</span>, <span class="a">check</span>: ctx =&gt; ... }],
+})
+<span class="c">// そのうえで specs/index.ts に import "./MyThing.verify" を追加</span></code></pre>
+</div>
+<div>
+<h4>検証器の種類を追加する</h4>
+<pre><code><span class="c">// src/verify/verifiers/perf.ts</span>
+<span class="k">import</span> { registerVerifier } <span class="k">from</span> <span class="s">"../core/registry"</span>
+
+<span class="t">registerVerifier</span>({
+  <span class="a">id</span>: <span class="s">"perf"</span>,
+  <span class="a">description</span>: <span class="s">"レンダリングを16msの予算内に収める"</span>,
+  <span class="a">run</span>({ root }) {
+    <span class="k">const</span> n = root.querySelectorAll(<span class="s">"*"</span>).length
+    <span class="k">return</span> [n &lt; <span class="n">500</span>
+      ? { <span class="a">verifier</span>:<span class="s">"perf"</span>, <span class="a">status</span>:<span class="s">"ok"</span>,   <span class="a">label</span>:<span class="s">`DOM size ${n}`</span> }
+      : { <span class="a">verifier</span>:<span class="s">"perf"</span>, <span class="a">status</span>:<span class="s">"warn"</span>, <span class="a">label</span>:<span class="s">`DOM size ${n} &gt; 500`</span> }]
+  },
+})
+<span class="c">// そのうえで verifiers/index.ts に import "./perf" を追加</span>
+<span class="c">// — 既存の全ユニット×フィクスチャに対して即座に実行される</span></code></pre>
+</div>
+</div>
+
+<p class="sub">
+  どちらもコンポーネントに手を入れる必要はありません。これが「モジュール性がある」という
+  主張を具体的な形にしたものです。
+</p>
+
+<!-- ============================================================== -->
+<h2 id="principles"><span class="num">12</span> 設計原則のまとめ</h2>
+
+<ol>
+  <li><strong>内部実装ではなく表層。</strong> レンダリングされたものを検証する。
+  DOMコントラクトは、コンポーネントと検証器のあいだのABIである。</li>
+  <li><strong>パイプラインは1本。</strong> <code>runFixture()</code> が判定を生み出す唯一の方法。
+  ダッシュボード、エージェント、CIはそのビューにすぎない。</li>
+  <li><strong>すべてを構造化する。</strong> マニフェスト、結果、チェック、スナップショット —
+  すべてJSON。AIエージェントがスクレイピングや推測をする必要は一切ない。</li>
+  <li><strong>probe は必須。</strong> ハッピーパスのみのスペックはCIが拒否する。
+  1ユニットにつき最低1つの🔍を。</li>
+  <li><strong>BLOCKED ≠ FAIL。</strong>「観測できなかった」と「観測した結果が誤っていた」は
+  別の事実であり、混同すると全員の時間を無駄にする。</li>
+  <li><strong>迷ったら FAIL。</strong> コストは非対称。例外は証拠付きの fail チェックになり、
+  決して握り潰されない。</li>
+  <li><strong>直交する拡張。</strong> 新しいユニットも新しい検証器の種類も、
+  どちらもファイル1つ + import 1行。調整なしで組み合わさる。</li>
+</ol>
+
+<div class="footer">
+  <p>
+    <code>verifiable-react</code> 向けに生成。開発サーバー:
+    <code>http://localhost:5199</code> · ダッシュボード:
+    <code>http://localhost:5199/verify</code> · CI:
+    <code>bun run verify</code>（27/27 通過）。
+  </p>
+</div>
+
+</div>
+</body>
+</html>
