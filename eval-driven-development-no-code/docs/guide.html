@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>評価駆動開発ガイド</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel2: #1e2230;
+    --border: #2b3044;
+    --text: #e6e8f0;
+    --dim: #8e94ab;
+    --accent: #7aa2ff;
+    --pass: #3fbf7f;
+    --fail: #ef5c70;
+    --warn: #e9b84b;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.8 -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    padding-bottom: 120px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 56px 16px 0; }
+
+  h1 { font-size: 34px; line-height: 1.3; margin: 0 0 8px; }
+  h2 {
+    font-size: 24px; margin: 56px 0 14px; padding-top: 18px;
+    border-top: 1px solid var(--border);
+  }
+  h2 .num { display: inline-block; min-width: 1.6em; color: var(--accent); opacity: 0.8; }
+  h3 { font-size: 18px; margin: 28px 0 8px; }
+  p { margin: 0 0 14px; }
+  .lead { font-size: 18px; color: var(--dim); margin: 6px 0 28px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { color: #fff; }
+  em.term { color: var(--accent); font-style: normal; font-weight: 600; }
+  code {
+    font-family: var(--mono); background: var(--panel2); padding: 2px 6px; border-radius: 5px;
+    font-size: 0.88em; border: 1px solid var(--border);
+  }
+
+  .callout {
+    background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 14px 18px; margin: 18px 0;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.pass { border-left-color: var(--pass); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout-title { font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+
+  nav.toc {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 22px; margin: 28px 0 8px;
+  }
+  nav.toc ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 36px; }
+  nav.toc li { margin: 4px 0; break-inside: avoid; }
+  nav.toc a { color: var(--text); }
+  @media (max-width: 720px) { nav.toc ol { columns: 1; } h1 { font-size: 28px; } }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 13px; }
+  td:first-child, th:first-child { padding-left: 0; }
+
+  .chip {
+    display: inline-block; font: 600 12px/1 var(--mono);
+    padding: 4px 9px; border-radius: 5px; border: 1px solid var(--border);
+  }
+  .chip.pass { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 40%, var(--border)); background: color-mix(in srgb, var(--pass) 12%, transparent); }
+  .chip.fail { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 40%, var(--border)); background: color-mix(in srgb, var(--fail) 12%, transparent); }
+
+  .diagram {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; margin: 18px 0 24px; overflow-x: auto;
+  }
+  .diagram svg { width: 100%; min-width: 600px; height: auto; display: block; }
+  .diagram .caption { color: var(--dim); font-size: 14px; margin-top: 10px; text-align: center; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 18px 0; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px;
+  }
+  .card h3 { margin-top: 0; }
+  .card p:last-child { margin-bottom: 0; }
+  .card ul { margin: 0; padding-left: 20px; }
+
+  .bars { margin: 14px 0 6px; }
+  .bar-row { display: grid; grid-template-columns: 3.2em 1fr 4.5em; gap: 10px; align-items: center; margin: 6px 0; }
+  .bar-track { background: var(--panel2); border-radius: 4px; height: 18px; overflow: hidden; }
+  .bar-fill { background: var(--accent); height: 100%; }
+  .bar-fill.bad { background: var(--fail); }
+  .bar-label { font-family: var(--mono); font-size: 13px; color: var(--dim); }
+  .bar-value { font-family: var(--mono); font-size: 13px; text-align: right; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>コードを書かずに始める評価駆動開発</h1>
+<p class="lead">AI の出力を「なんとなく」ではなく「テストケースと採点表」で測り、数字を見ながら改善する。ワークショップの考え方を図解でまとめたガイドです。</p>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#what">評価駆動開発とは</a></li>
+    <li><a href="#why">「なんとなく良さそう」の落とし穴</a></li>
+    <li><a href="#loop">全体の流れ</a></li>
+    <li><a href="#tools">3つの道具</a></li>
+    <li><a href="#graders">2種類の採点</a></li>
+    <li><a href="#improve">改善ループのコツ</a></li>
+    <li><a href="#judge">採点係を疑う</a></li>
+    <li><a href="#work">職場で始めるには</a></li>
+  </ol>
+</nav>
+
+<h2 id="what"><span class="num">1</span>評価駆動開発とは</h2>
+<p><em class="term">評価駆動開発</em>（eval-driven development）は、AI に仕事を任せる前に <strong>「何ができたら合格か」と「どうやって確かめるか」を先に決めておく</strong> 進め方です。</p>
+<p>新人の育成にたとえると分かりやすいでしょう。新人に仕事を任せるとき、いきなり本番に出すことはありません。過去の事例で練習させ、先輩がチェックし、苦手なところを教え、また練習させる。評価駆動開発は、これを AI に対して、記録を取りながら行うことです。</p>
+
+<div class="table-wrap">
+<table>
+  <tr><th>新人育成</th><th>評価駆動開発</th><th>ワークショップでの対応</th></tr>
+  <tr><td>過去の事例で練習させる</td><td>テストケース</td><td><code>step-2-testcases/testcases.csv</code></td></tr>
+  <tr><td>先輩のチェックリスト</td><td>採点表</td><td><code>step-3-grading/rubric.md</code></td></tr>
+  <tr><td>最初の実力を把握する</td><td>ベースライン</td><td>v1 の合格率・平均点</td></tr>
+  <tr><td>マニュアルを直して教える</td><td>指示（プロンプト）の改善</td><td>v2, v3 …</td></tr>
+</table>
+</div>
+
+<h2 id="why"><span class="num">2</span>「なんとなく良さそう」の落とし穴</h2>
+<p>AI を試すとき、多くの人は <strong>思いついた例を1〜2個試して、返ってきた答えが良さそうなら OK</strong> と判断します。これには3つの問題があります。</p>
+
+<div class="grid2">
+  <div class="card">
+    <h3>試すケースが偏る</h3>
+    <p>思いつくのは「ふつうの例」ばかり。AI が失敗しやすいのは、一部だけ断りたい・理由を言いたくない・相手を傷つけたくない、といった微妙な場面です。</p>
+  </div>
+  <div class="card">
+    <h3>良し悪しの基準がぶれる</h3>
+    <p>「感じはいいからいいか」「ちょっと長いけどまあいいか」。その日の気分や見る人によって判断が変わり、比べられません。</p>
+  </div>
+  <div class="card">
+    <h3>直したら別のところが壊れる</h3>
+    <p>ある失敗を直すために指示を書き足すと、それまでうまくいっていたケースが悪くなることがあります（<em class="term">退行</em>）。1件だけ試していると気づけません。</p>
+  </div>
+  <div class="card">
+    <h3>改善したのか分からない</h3>
+    <p>直す前の状態を記録していないと、「良くなった気がする」以上のことは言えません。上司やチームに説明もできません。</p>
+  </div>
+</div>
+
+<h2 id="loop"><span class="num">3</span>全体の流れ</h2>
+<p>ワークショップは4つのステップで進みます。ステップ1〜3で「測る仕組み」を作り、ステップ4で「測りながら直す」ループを回します。</p>
+
+<div class="diagram">
+<svg viewBox="0 0 760 340" role="img" aria-label="評価駆動開発の流れ：合格基準を決める、テストケースを作る、ベースラインを測る、の後に、失敗を分析・指示を1か所直す・全ケースで測り直す・比べる、のループを回す">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e94ab"/>
+    </marker>
+  </defs>
+  <g font-family="-apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif" font-size="15" fill="#e6e8f0">
+    <!-- setup steps -->
+    <rect x="20" y="30" width="200" height="64" rx="10" fill="#1e2230" stroke="#2b3044"/>
+    <text x="120" y="56" text-anchor="middle" fill="#7aa2ff" font-size="12">STEP 1</text>
+    <text x="120" y="79" text-anchor="middle">合格基準を決める</text>
+
+    <rect x="20" y="138" width="200" height="64" rx="10" fill="#1e2230" stroke="#2b3044"/>
+    <text x="120" y="164" text-anchor="middle" fill="#7aa2ff" font-size="12">STEP 2</text>
+    <text x="120" y="187" text-anchor="middle">テストケースを作る</text>
+
+    <rect x="20" y="246" width="200" height="64" rx="10" fill="#1e2230" stroke="#2b3044"/>
+    <text x="120" y="272" text-anchor="middle" fill="#7aa2ff" font-size="12">STEP 3</text>
+    <text x="120" y="295" text-anchor="middle">ベースラインを測る</text>
+
+    <line x1="120" y1="94" x2="120" y2="134" stroke="#8e94ab" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="120" y1="202" x2="120" y2="242" stroke="#8e94ab" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="220" y1="278" x2="296" y2="278" stroke="#8e94ab" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <!-- loop -->
+    <text x="520" y="22" text-anchor="middle" fill="#7aa2ff" font-size="12">STEP 4　改善ループ</text>
+    <rect x="300" y="40" width="440" height="290" rx="16" fill="none" stroke="#2b3044" stroke-dasharray="5 5"/>
+
+    <rect x="420" y="56" width="200" height="54" rx="10" fill="#1e2230" stroke="#7aa2ff"/>
+    <text x="520" y="88" text-anchor="middle">① 失敗をグループ分け</text>
+
+    <rect x="530" y="160" width="196" height="54" rx="10" fill="#1e2230" stroke="#7aa2ff"/>
+    <text x="628" y="192" text-anchor="middle">② 指示を1か所だけ直す</text>
+
+    <rect x="420" y="258" width="200" height="54" rx="10" fill="#1e2230" stroke="#7aa2ff"/>
+    <text x="520" y="290" text-anchor="middle">③ 全ケースで測り直す</text>
+
+    <rect x="314" y="160" width="196" height="54" rx="10" fill="#1e2230" stroke="#7aa2ff"/>
+    <text x="412" y="186" text-anchor="middle">④ ベースラインと比べる</text>
+    <text x="412" y="205" text-anchor="middle" font-size="12" fill="#e9b84b">退行はないか？</text>
+
+    <path d="M620,96 C680,110 690,130 660,156" fill="none" stroke="#8e94ab" stroke-width="1.5" marker-end="url(#arr)"/>
+    <path d="M660,214 C690,240 670,262 624,276" fill="none" stroke="#8e94ab" stroke-width="1.5" marker-end="url(#arr)"/>
+    <path d="M420,284 C360,270 340,240 370,218" fill="none" stroke="#8e94ab" stroke-width="1.5" marker-end="url(#arr)"/>
+    <path d="M380,160 C350,130 370,100 416,90" fill="none" stroke="#8e94ab" stroke-width="1.5" marker-end="url(#arr)"/>
+  </g>
+</svg>
+<div class="caption">測る仕組みを作ってから（左）、測りながら直すループを回す（右）</div>
+</div>
+
+<h2 id="tools"><span class="num">4</span>3つの道具</h2>
+
+<h3>テストケース ― AI に解かせる問題集</h3>
+<p>AI に渡す入力と、それに対する「上手な対応のポイント」の組です。ワークショップでは断りたい場面を10件用意しています。数は少なくても、種類を意識して選ぶのが大事です。</p>
+<div class="table-wrap">
+<table>
+  <tr><th>種類</th><th>例</th><th>なぜ入れるか</th></tr>
+  <tr><td>よくある誘い</td><td>上司からの飲み会の誘い</td><td>基本ができているかの確認</td></tr>
+  <tr><td>一部だけ断る</td><td>二次会には出るが幹事は断る</td><td>受けることと断ることを両方はっきり書けるか</td></tr>
+  <tr><td>条件つきなら受けられる</td><td>明日は無理、明後日なら1時間</td><td>事情どおりの代わりの案を出せるか</td></tr>
+  <tr><td>気持ちに応えられない</td><td>友人からの告白</td><td>傷つけずに、でも期待を残さずに断れるか</td></tr>
+  <tr><td>理由が書かれていない</td><td>「日曜ひま？」</td><td>「先約がある」などの作り話をしないか</td></tr>
+  <tr><td>英語のメッセージ</td><td>深夜の会議への招待</td><td>相手の言語に合わせられるか</td></tr>
+</table>
+</div>
+
+<h3>採点表 ― 誰が見ても同じ判定になる基準</h3>
+<p>「感じがいいこと」では、採点者によって判断がぶれます。「最初の1〜2文で断ることが分かる」のように、<strong>判定できる言葉</strong> に言い換えるのがポイントです。詳しくは次の章で。</p>
+
+<h3>ベースライン ― 直す前の点数</h3>
+<p>指示を直す前に、必ず今の点数を記録します。比べる相手がいなければ、改善したかどうかは分かりません。</p>
+<div class="bars" aria-label="合格率の推移の例">
+  <div class="bar-row"><span class="bar-label">v1</span><div class="bar-track"><div class="bar-fill" style="width:30%"></div></div><span class="bar-value">3/10</span></div>
+  <div class="bar-row"><span class="bar-label">v2</span><div class="bar-track"><div class="bar-fill" style="width:80%"></div></div><span class="bar-value">8/10</span></div>
+  <div class="bar-row"><span class="bar-label">v3</span><div class="bar-track"><div class="bar-fill bad" style="width:60%"></div></div><span class="bar-value">6/10</span></div>
+</div>
+<p style="color:var(--dim);font-size:14px">数字は説明用の架空の例です。v3 は良かれと思って書き足した指示が裏目に出て、合格率が下がった例。こうした「改悪」に気づけるのが、測り続けることの価値です。</p>
+
+<h2 id="graders"><span class="num">5</span>2種類の採点</h2>
+<p>採点表の項目は、性質の違う2種類に分けます。</p>
+
+<div class="grid2">
+  <div class="card">
+    <h3><span class="chip pass">✅</span> <span class="chip fail">❌</span>　チェック項目</h3>
+    <p>はい／いいえで判定できるもの。</p>
+    <ul>
+      <li>はっきり断っている</li>
+      <li>作り話の理由を書いていない</li>
+      <li>120字以内</li>
+    </ul>
+    <p style="margin-top:10px;color:var(--dim);font-size:14px">判定がぶれにくく、速く・安く測れる。文字数のように<strong>機械で測れるものは機械で</strong>。</p>
+  </div>
+  <div class="card">
+    <h3><span class="chip">1〜5</span>　スコア項目</h3>
+    <p>程度を評価するもの。</p>
+    <ul>
+      <li>相手への気づかい</li>
+      <li>そのまま送れる自然さ</li>
+    </ul>
+    <p style="margin-top:10px;color:var(--dim);font-size:14px">1点・3点・5点がそれぞれどんな状態かを書いておかないと、採点がぶれる。</p>
+  </div>
+</div>
+
+<div class="callout">
+  <div class="callout-title">迷ったらチェック項目に寄せる</div>
+  <p>「分かりやすい断り方」は 1〜5 のスコアでしか測れないように見えますが、「最初の1〜2文で断ることが分かる」と言い換えれば ✅/❌ で判定できます。チェック項目のほうが採点が安定するので、言い換えられるものは言い換えましょう。</p>
+</div>
+
+<h2 id="improve"><span class="num">6</span>改善ループのコツ</h2>
+<div class="table-wrap">
+<table>
+  <tr><th>やりがちなこと</th><th>代わりにこうする</th></tr>
+  <tr><td>失敗した1件を見て、すぐ指示を直す</td><td>失敗を原因ごとにグループ分けし、影響の大きいグループから直す</td></tr>
+  <tr><td>気になった点をまとめて5つ書き足す</td><td>1回に直すのは1つの原因だけ。何が効いたか分かるように</td></tr>
+  <tr><td>直したかったケースだけ試す</td><td>必ず全ケースで測り直す</td></tr>
+  <tr><td>合格率が上がったので満足する</td><td>前のバージョンで合格していたケースが落ちていないか（退行）も見る</td></tr>
+  <tr><td>Claude に指示を全部書き直してもらう</td><td>自分で1〜3行書き足す。変更点がはっきりする</td></tr>
+</table>
+</div>
+
+<div class="callout warn">
+  <div class="callout-title">AI の出力は毎回少しずつ違う</div>
+  <p>同じ指示・同じ場面でも、生成するたびに返信は変わります。1回だけの結果で「良くなった／悪くなった」と決めつけず、差が小さいときはもう一度測ってみましょう。ケースの数を増やすほど、たまたまの差に振り回されにくくなります。</p>
+</div>
+
+<h2 id="judge"><span class="num">7</span>採点係を疑う</h2>
+<p>ワークショップでは、採点も Claude に任せます（専門用語で <em class="term">LLM-as-a-judge</em>）。人間が全件を採点するより圧倒的に速いですが、採点係の AI も間違えます。</p>
+<ul>
+  <li><strong>返信を書いたチャットとは別のチャットで採点させる。</strong> 自分で書いたものには甘くなりがちです。</li>
+  <li><strong>ときどき人間が採点して、AI の採点と比べる。</strong> ワークショップでは3件だけ行います。</li>
+  <li><strong>ずれていたら、まず採点表を疑う。</strong> 人間と AI の判定が分かれるのは、多くの場合、採点表の言葉があいまいだからです。</li>
+  <li><strong>文字数のような数えられるものは AI に数えさせない。</strong> ツールで正確に測ります。</li>
+</ul>
+
+<h2 id="work"><span class="num">8</span>職場で始めるには</h2>
+<div class="callout pass">
+  <div class="callout-title">小さく始める3ステップ</div>
+  <p><strong>1. 実例を集める。</strong> AI に繰り返し頼んでいる仕事（メールの下書き、議事録の要約、問い合わせへの回答など）から、実際の入力を10〜30件。AI の出力がイマイチだった例は、最も価値のあるテストケースです。</p>
+  <p><strong>2. 「合格」の定義を決める。</strong> チームで使うなら、みんなで合意します。 採点表は、その業務をよく知っている人（あなたです）が決めるのがいちばんです。</p>
+  <p><strong>3. 指示を変えるたびに測る習慣をつける。</strong> スプレッドシート1枚で十分です。バージョンと点数を記録し続けることで、「なぜこの指示になっているのか」がチームの資産として残ります。</p>
+</div>
+<p>評価駆動開発の一番の価値は、AI の改善を <strong>「その業務を一番よく知っている人」が主導できる</strong> ようになることです。何が良い出力なのかをいちばん知っているのは、毎日その仕事に向き合っている人だからです。</p>
+
+<p style="margin-top:48px;color:var(--dim);font-size:14px">← <a href="../README.md">ワークショップの README に戻る</a></p>
+
+</div>
+</body>
+</html>
